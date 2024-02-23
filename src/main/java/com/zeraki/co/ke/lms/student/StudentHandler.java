@@ -6,12 +6,10 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.URI;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,11 +38,22 @@ public class StudentHandler implements HttpHandler {
                 throw new RuntimeException(e);
             }
         } else if (method.equals("PUT")) {
-            handlePutRequest(exchange);
+            try {
+                // Check if the request is for transferring a student
+                URI uri = exchange.getRequestURI();
+                String path = uri.getPath();
+                if (path.equals("/students/transfer")) {
+                    handleTransferRequest(exchange);
+                } else {
+                    handlePutRequest(exchange);
+                }
+            } catch (JSONException e) {
+                throw new RuntimeException(e);
+            }
         } else if (method.equals("DELETE")) {
             handleDeleteRequest(exchange);
         } else {
-            sendResponse(exchange, 405, "Method Not Allowed");
+            sendResponse(exchange, 405, " {\"error\": \"Invalid ID format\"}");
         }
     }
 
@@ -65,7 +74,7 @@ public class StudentHandler implements HttpHandler {
                 List<Student> students = studentManager.listStudentsByInstitution(institutionId, searchQuery);
                 sendResponse(exchange, 200, studentsToJson(students).toString());
             } else {
-                sendResponse(exchange, 400, "Missing institutionId parameter");
+                sendResponse(exchange, 400, "{\"error\": \"Missing institutionId parameter\"}");
             }
         } else if (path.startsWith("/students/course")) {
             // Endpoint to get students by course ID
@@ -75,10 +84,10 @@ public class StudentHandler implements HttpHandler {
                 List<Student> students = studentManager.listStudentsByCourse(courseId, searchQuery);
                 sendResponse(exchange, 200, studentsToJson(students).toString());
             } else {
-                sendResponse(exchange, 400, "Missing courseId parameter");
+                sendResponse(exchange, 400, "{\"error\": \"Missing courseId parameter\"}");
             }
         } else {
-            sendResponse(exchange, 404, "Not Found");
+            sendResponse(exchange, 404, "{\"error\": \"Not Found\"}");
         }
     }
 
@@ -104,36 +113,84 @@ public class StudentHandler implements HttpHandler {
 
             boolean success = studentManager.addStudent(name, courseId, institutionId);
             if (success) {
-                sendResponse(exchange, 201, "Student added successfully");
+                sendResponse(exchange, 201, "{\"message\": \"Student added successfully\"}");
             } else {
-                sendResponse(exchange, 500, "Internal Server Error");
+                sendResponse(exchange, 500, "{\"error\": \"Internal Server Error\"}");
             }
         } else {
-            sendResponse(exchange, 400, "Invalid request body");
+            sendResponse(exchange, 400, "{\"error\": \"Invalid request body\"}");
         }
     }
 
-    private void handlePutRequest(HttpExchange exchange) throws IOException {
+    private void handlePutRequest(HttpExchange exchange) throws IOException, JSONException {
         URI uri = exchange.getRequestURI();
         String path = uri.getPath();
-        Map<String, String> queryParams = parseQueryParams(uri.getQuery());
 
         if (path.startsWith("/students")) {
-            if (queryParams.containsKey("id") && queryParams.containsKey("name")) {
-                int studentId = Integer.parseInt(queryParams.get("id"));
-                String newName = queryParams.get("name");
+            if ("PUT".equals(exchange.getRequestMethod())) {
+                InputStreamReader isr = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8);
+                BufferedReader br = new BufferedReader(isr);
+                StringBuilder requestBody = new StringBuilder();
+                String line;
 
-                boolean success = studentManager.editStudentName(studentId, newName);
-                if (success) {
-                    sendResponse(exchange, 200, "Student name updated successfully");
+                while ((line = br.readLine()) != null) {
+                    requestBody.append(line);
+                }
+
+                JSONObject jsonObject = new JSONObject(requestBody.toString());
+
+                if (jsonObject.has("studentId") && jsonObject.has("name")) {
+                    int studentId = jsonObject.getInt("studentId");
+                    String newName = jsonObject.getString("name");
+
+                    boolean success = studentManager.editStudentName(studentId, newName);
+                    if (success) {
+                        sendResponse(exchange, 200, "{\"message\": \"Student name updated successfully\"}");
+                    } else {
+                        sendResponse(exchange, 404, "{\"error\": \"Student not found\"}");
+                    }
                 } else {
-                    sendResponse(exchange, 404, "Student not found");
+                    sendResponse(exchange, 400, "{\"error\": \"Missing studentId or name parameter\"}");
                 }
             } else {
-                sendResponse(exchange, 400, "Missing id or name parameter");
+                sendResponse(exchange, 405, "{\"error\": \"Method Not Allowed\"}");
             }
         } else {
-            sendResponse(exchange, 404, "Not Found");
+            sendResponse(exchange, 404, "{\"error\": \"Not Found\"}");
+        }
+    }
+
+    private void handleTransferRequest(HttpExchange exchange) throws IOException, JSONException {
+        if (exchange.getRequestMethod().equals("PUT")) {
+            // Read the request body
+            InputStream requestBody = exchange.getRequestBody();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(requestBody));
+            StringBuilder requestBodyBuilder = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                requestBodyBuilder.append(line);
+            }
+
+            // Parse the request body as JSON
+            JSONObject jsonRequest = new JSONObject(requestBodyBuilder.toString());
+
+            // Extract transfer information from JSON
+            if (jsonRequest.has("studentId") && jsonRequest.has("newInstitutionId") && jsonRequest.has("newCourseId")) {
+                int studentId = jsonRequest.getInt("studentId");
+                int newInstitutionId = jsonRequest.getInt("newInstitutionId");
+                int newCourseId = jsonRequest.getInt("newCourseId");
+
+                boolean success = studentManager.transferStudent(studentId, newInstitutionId, newCourseId);
+                if (success) {
+                    sendResponse(exchange, 200, "{\"message\": \"Student transferred successfully\"}");
+                } else {
+                    sendResponse(exchange, 404, "{\"error\": \"Student not found or unable to transfer\"}");
+                }
+            } else {
+                sendResponse(exchange, 400, "{\"error\": \"Invalid transfer request. Missing studentId, newInstitutionId, or newCourseId parameter\"}");
+            }
+        } else {
+            sendResponse(exchange, 405, "{\"error\": \"Method Not Allowed\"}");
         }
     }
 
@@ -148,15 +205,15 @@ public class StudentHandler implements HttpHandler {
 
                 boolean success = studentManager.deleteStudent(studentId);
                 if (success) {
-                    sendResponse(exchange, 200, "Student deleted successfully");
+                    sendResponse(exchange, 200, "{\"message\": \"Student deleted successfully\"}");
                 } else {
-                    sendResponse(exchange, 404, "Student not found");
+                    sendResponse(exchange, 404, "{\"error\": \"Student not found\"}");
                 }
             } else {
-                sendResponse(exchange, 400, "Missing studentId parameter");
+                sendResponse(exchange, 400, "{\"error\": \"Missing studentId parameter\"}");
             }
         } else {
-            sendResponse(exchange, 404, "Not Found");
+            sendResponse(exchange, 404, "{\"error\": \"Not Found\"}");
         }
     }
 

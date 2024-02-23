@@ -2,12 +2,15 @@ package com.zeraki.co.ke.lms.institution;
 
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpExchange;
+import com.zeraki.co.ke.lms.db.DatabaseManager;
 import org.json.JSONException;
 import org.json.JSONObject;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.List;
 
 public class InstitutionHandler implements HttpHandler {
@@ -45,7 +48,7 @@ public class InstitutionHandler implements HttpHandler {
                 throw new RuntimeException(e);
             }
         } else {
-            sendResponse(exchange, 405, "Method Not Allowed");
+            sendResponse(exchange, 405, " {\"error\": \"Method Not Allowed \"}");
         }
     }
 
@@ -77,7 +80,7 @@ public class InstitutionHandler implements HttpHandler {
             jsonResponse.put(String.valueOf(newInstitution.getId()), institutionToJson(newInstitution));
             sendResponse(exchange, 201, jsonResponse.toString());
         } else {
-            sendResponse(exchange, 400, "Failed to add institution. Check if it already exists.");
+            sendResponse(exchange, 400, " {\"error\": \"Failed to add institution. Check if it already exists. \"}");
         }
     }
     private void handlePutRequest(HttpExchange exchange) throws IOException, JSONException {
@@ -85,10 +88,11 @@ public class InstitutionHandler implements HttpHandler {
         String[] pathParts = path.split("/");
         if (pathParts.length == 3) {
             int id;
+
             try {
                 id = Integer.parseInt(pathParts[2]);
             } catch (NumberFormatException e) {
-                sendResponse(exchange, 400, "Invalid ID format");
+                sendResponse(exchange, 400, " {\"error\": \"Invalid ID format\"}");
                 return;
             }
 
@@ -104,7 +108,7 @@ public class InstitutionHandler implements HttpHandler {
             String newName = jsonRequest.optString("name");
 
             if (newName.isEmpty()) {
-                sendResponse(exchange, 400, "New name cannot be empty");
+                sendResponse(exchange, 400, "{\"error\": \"New name cannot be empty \"}");
                 return;
             }
 
@@ -115,10 +119,10 @@ public class InstitutionHandler implements HttpHandler {
                 jsonResponse.put("name", newName);
                 sendResponse(exchange, 200, jsonResponse.toString());
             } else {
-                sendResponse(exchange, 404, "Institution not found or failed to update institution name");
+                sendResponse(exchange, 404, "{\"error\": \"Institution not found or failed to update institution name \"}" );
             }
         } else {
-            sendResponse(exchange, 400, "Invalid request");
+            sendResponse(exchange, 400, "{\"error\": \"Invalid Request \"}");
         }
     }
 
@@ -130,7 +134,7 @@ public class InstitutionHandler implements HttpHandler {
             try {
                 id = Integer.parseInt(pathParts[2]);
             } catch (NumberFormatException e) {
-                sendResponse(exchange, 400, "Invalid ID format");
+                sendResponse(exchange, 400, " {\"error\": \"Invalid ID format\"}");
                 return;
             }
 
@@ -140,12 +144,25 @@ public class InstitutionHandler implements HttpHandler {
                 jsonResponse.put("id", id);
                 sendResponse(exchange, 200, jsonResponse.toString());
             } else {
-                sendResponse(exchange, 404, "Institution not found");
+                try (Connection connection = DatabaseManager.getConnection()) {
+                    // Check if the institution has associated courses or students
+                    if (institutionManager.hasAssociatedCourses(connection, id)) {
+                        sendResponse(exchange, 400, "{\"error\": \"Cannot delete institution with associated courses\"}");
+                    } else if (institutionManager.hasAssociatedStudents(connection, id)) {
+                        sendResponse(exchange, 400, "{\"error\": \"Cannot delete institution with associated students\"}");
+                    } else {
+                        sendResponse(exchange, 404, "{\"error\": \"Institution not found\"}");
+                    }
+                } catch (SQLException e) {
+                    e.printStackTrace();
+                    sendResponse(exchange, 500, "{\"error\": \"Internal Server Error\"}");
+                }
             }
         } else {
-            sendResponse(exchange, 400, "Invalid request");
+            sendResponse(exchange, 400, "{\"error\": \"Invalid request\"}");
         }
     }
+
 
     private JSONObject institutionToJson(Institution institution) throws JSONException {
         JSONObject jsonInstitution = new JSONObject();

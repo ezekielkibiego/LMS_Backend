@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class StudentManager {
+
     // Add a student and assign them a course
     public boolean addStudent(String name, int courseId, int institutionId) {
         try (Connection connection = DatabaseManager.getConnection();
@@ -68,13 +69,24 @@ public class StudentManager {
         try (Connection connection = DatabaseManager.getConnection()) {
             // Check if the new course exists in the new institution
             if (isCourseInInstitution(newCourseId, newInstitutionId)) {
-                // Transfer the student to the new course in the new institution
-                return updateStudentCourse(studentId, newCourseId);
+                // Transfer the student to the new institution and course
+                return updateStudentInstitutionAndCourse(studentId, newInstitutionId, newCourseId);
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
         return false;
+    }
+
+    private boolean updateStudentInstitutionAndCourse(int studentId, int newInstitutionId, int newCourseId) throws SQLException {
+        try (Connection connection = DatabaseManager.getConnection();
+             PreparedStatement statement = connection.prepareStatement("UPDATE students SET institution_id = ?, course_id = ? WHERE id = ?")) {
+            statement.setInt(1, newInstitutionId);
+            statement.setInt(2, newCourseId);
+            statement.setInt(3, studentId);
+            int rowsUpdated = statement.executeUpdate();
+            return rowsUpdated > 0;
+        }
     }
 
     // Check if a course exists in an institution
@@ -104,8 +116,6 @@ public class StudentManager {
         }
     }
 
-    // List all students in each institution and be able to search
-    // List all students in an institution and be able to search
     public List<Student> listStudentsByInstitution(int institutionId, String searchQuery) {
         List<Student> students = new ArrayList<>();
         try (Connection connection = DatabaseManager.getConnection();
@@ -127,8 +137,6 @@ public class StudentManager {
         }
         return students;
     }
-
-
 
     // List students by course
     public List<Student> listStudentsByCourse(int courseId, String searchQuery) {
@@ -198,7 +206,4 @@ public class StudentManager {
         }
         return students;
     }
-
 }
-
-

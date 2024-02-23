@@ -4,6 +4,8 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpExchange;
 import com.zeraki.co.ke.lms.institution.InstitutionManager;
 import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.HashMap;
@@ -28,7 +30,7 @@ public class CourseHandler implements HttpHandler {
         } else if (method.equals("DELETE")) {
             handleDeleteRequest(exchange);
         } else {
-            sendResponse(exchange, 405, "Method Not Allowed");
+            sendResponse(exchange, 405, "{\"error\": \"Method Not Allowed\"}");
         }
     }
 
@@ -49,7 +51,7 @@ public class CourseHandler implements HttpHandler {
             JSONArray jsonArray = new JSONArray(courses.stream().map(Course::toJson).collect(Collectors.toList()));
             sendResponse(exchange, 200, jsonArray.toString());
         } else {
-            sendResponse(exchange, 400, "Missing or invalid institutionId parameter");
+            sendResponse(exchange, 400, "{\"error\": \"Missing or invalid institutionId parameter\"}");
         }
     }
 
@@ -78,12 +80,12 @@ public class CourseHandler implements HttpHandler {
             // Attempt to delete the course
             boolean success = courseManager.deleteCourse(courseId);
             if (success) {
-                sendResponse(exchange, 200, "Course deleted successfully");
+                sendResponse(exchange, 200, "{\"message\": \"Course deleted successfully\"}");
             } else {
-                sendResponse(exchange, 400, "Cannot delete course. It is assigned to at least one student.");
+                sendResponse(exchange, 400, "{\"error\": \"Cannot delete course. It is assigned to at least one student.\"}");
             }
         } else {
-            sendResponse(exchange, 400, "Missing course ID parameter");
+            sendResponse(exchange, 400, "{\"error\": \"Missing course ID parameter\"}");
         }
     }
 
