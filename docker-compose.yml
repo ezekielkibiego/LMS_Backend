@@ -12,7 +12,7 @@ services:
     image: postgres:latest
     environment:
       POSTGRES_DB: lms_0k07
-      POSTGRES_USER: lms_0k07_user
+      POSTGRES_USER: lms_0k07_ezekielkibiego
       POSTGRES_PASSWORD: NoyxR2mDrrFD5E1JnOYjPDSAFxfirOjG
     ports:
       - "5432:5432"
