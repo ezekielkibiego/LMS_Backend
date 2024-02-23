@@ -11,4 +11,4 @@ COPY target/LMS-0.0.1-SNAPSHOT.jar /app
 EXPOSE 8002
 
 # Command to run the application when the container starts
-CMD ["java", "-jar", "your-java-application.jar"]
+CMD ["java", "-jar", "LMS-0.0.1-SNAPSHOT.jar"]
